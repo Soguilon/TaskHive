@@ -217,3 +217,24 @@ label{color:var(--text-secondary); font-size:.85rem; margin-bottom:.3rem; font-w
   .th-search-box{display:none;}
   .th-login-card{padding:1.5rem;}
 }
+
+/* ---------- Notifications Dropdown ---------- */
+#notifDropdown {
+  color: var(--text) !important;
+}
+
+#notifDropdown .text-secondary-th {
+  color: var(--text-secondary) !important;
+}
+
+#notifDropdown strong {
+  color: var(--text) !important;
+}
+
+#notifDropdown [data-id] {
+  color: var(--text);
+}
+
+#notifDropdown [data-id]:hover {
+  background: rgba(255,214,10,.06);
+}
