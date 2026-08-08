@@ -231,7 +231,7 @@ async function initNotifications_(session) {
         '<strong style="font-size:.85rem;">Notifications</strong>' +
         '<button class="btn btn-sm btn-th-outline" id="markAllReadBtn" style="font-size:.72rem; padding:.2rem .6rem;">Mark all read</button></div>' +
         notifs.map(function (n) {
-          return '<div class="p-2 border-bottom" data-id="' + n.NotificationID + '" style="border-color:var(--border) !important; cursor:pointer; ' + (n.IsRead ? 'opacity:.55;' : '') + '">' +
+          return '<div class="p-2 border-bottom" data-id="' + n.NotificationID + '" style="border-color:var(--border) !important; cursor:pointer; ' + (n.IsRead ? 'background:rgba(255,255,255,.02);' : '') + '">' +
             '<div style="font-weight:600; font-size:.82rem;">' + thEscape(n.Title) + '</div>' +
             '<div class="text-secondary-th" style="font-size:.78rem;">' + thEscape(n.Message) + '</div>' +
             '<div class="text-secondary-th" style="font-size:.68rem; margin-top:2px;">' + thFmtDateTime(n.DateTime) + '</div></div>';
