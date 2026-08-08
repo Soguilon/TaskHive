@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Trash — TaskHive Admin</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+<link rel="stylesheet" href="../assets/css/style.css">
+</head>
+<body>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="../assets/js/api.js"></script>
+<script src="../assets/js/auth.js"></script>
+<script src="../assets/js/app.js"></script>
+<script>
+(async function(){
+  const session = buildShell('trash.html');
+  if (!session) return;
+  Theme.init();
+  const content = document.getElementById('thContent');
+  content.innerHTML = '<h4 class="mb-3"><i class="fa-solid fa-trash me-2"></i>Trash</h4><div id="trashGrid" class="th-grid cols-3"></div>';
+
+  async function load(){
+    const res = await Api.call('getTrash');
+    const grid = document.getElementById('trashGrid');
+    if (!res.success){ grid.innerHTML = thEmptyHtml('fa-triangle-exclamation', res.message); return; }
+    if (!res.data.length){ grid.innerHTML = thEmptyHtml('fa-trash-can','Trash is empty'); return; }
+    grid.innerHTML = res.data.map(p=>
+      '<div class="th-card"><h6>'+thEscape(p.ProjectName)+'</h6>'+
+      '<p class="text-secondary-th" style="font-size:.85rem;">'+thEscape(p.Description||'')+'</p>'+
+      '<div class="text-secondary-th" style="font-size:.78rem;">Deleted '+thFmtDate(p.DeletedDate)+'</div>'+
+      '<div class="d-flex gap-2 mt-3">'+
+        '<button class="btn btn-th-primary btn-sm flex-fill restore-btn" data-id="'+p.ProjectID+'"><i class="fa-solid fa-rotate-left me-2"></i>Restore</button>'+
+        '<button class="btn btn-th-danger btn-sm flex-fill perm-del-btn" data-id="'+p.ProjectID+'"><i class="fa-solid fa-trash-can"></i> Delete Forever</button>'+
+      '</div></div>'
+    ).join('');
+    grid.querySelectorAll('.restore-btn').forEach(b=>b.onclick=async()=>{
+      const res = await Api.call('restoreProjectFromTrash', {projectId:b.dataset.id, actorId:session.id, actorName:session.name});
+      if (res.success){ thToast('Project restored','success'); load(); } else thToast(res.message,'error');
+    });
+    grid.querySelectorAll('.perm-del-btn').forEach(b=>b.onclick=async()=>{
+      if (!confirm('Permanently delete this project? This CANNOT be undone.')) return;
+      const res = await Api.call('permanentlyDeleteProject', {projectId:b.dataset.id, actorId:session.id, actorName:session.name});
+      if (res.success){ thToast('Project permanently deleted','success'); load(); } else thToast(res.message,'error');
+    });
+  }
+  load();
+})();
+</script>
+</body>
+</html>

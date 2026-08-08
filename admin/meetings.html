@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Meetings — TaskHive Admin</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+<link rel="stylesheet" href="../assets/css/style.css">
+</head>
+<body>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="../assets/js/api.js"></script>
+<script src="../assets/js/auth.js"></script>
+<script src="../assets/js/app.js"></script>
+<script>
+(async function(){
+  const session = buildShell('meetings.html');
+  if (!session) return;
+  Theme.init();
+  const content = document.getElementById('thContent');
+  let meetings = [], projects = [];
+
+  content.innerHTML =
+    '<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">'+
+      '<h4 class="mb-0"><i class="fa-solid fa-calendar-check me-2"></i>Meetings</h4>'+
+      '<button class="btn btn-th-primary" id="newMeetingBtn"><i class="fa-solid fa-plus me-2"></i>Schedule Meeting</button>'+
+    '</div>'+
+    '<div id="meetingGrid" class="th-grid cols-3"></div>';
+
+  function projectName(id){ const p = projects.find(x=>x.ProjectID===id); return p?p.ProjectName:'General'; }
+
+  function render(){
+    const grid = document.getElementById('meetingGrid');
+    if (!meetings.length){ grid.innerHTML = thEmptyHtml('fa-calendar-xmark','No meetings scheduled yet'); return; }
+    grid.innerHTML = meetings.map(m=>
+      '<div class="th-card">'+
+        '<div class="d-flex justify-content-between align-items-start mb-2"><h6 class="mb-0">'+thEscape(m.Title)+'</h6>'+
+        '<span class="badge-status '+(m.Status==='Cancelled'?'badge-needs-revision':'badge-approved')+'">'+m.Status+'</span></div>'+
+        '<p class="text-secondary-th" style="font-size:.85rem;">'+thEscape(m.Description||'No description')+'</p>'+
+        '<div style="font-size:.82rem;" class="mb-1"><i class="fa-solid fa-folder me-2 text-secondary-th"></i>'+thEscape(projectName(m.ProjectID))+'</div>'+
+        '<div style="font-size:.82rem;" class="mb-1"><i class="fa-solid fa-calendar me-2 text-secondary-th"></i>'+thFmtDate(m.Date)+' '+thEscape(m.Time||'')+'</div>'+
+        (m.Location?'<div style="font-size:.82rem;" class="mb-1"><i class="fa-solid fa-location-dot me-2 text-secondary-th"></i>'+thEscape(m.Location)+'</div>':'')+
+        (m.MeetingLink?'<div style="font-size:.82rem;" class="mb-1"><i class="fa-solid fa-link me-2 text-secondary-th"></i><a href="'+thEscape(m.MeetingLink)+'" target="_blank">Join link</a></div>':'')+
+        '<div class="d-flex gap-2 mt-3">'+
+          '<button class="btn btn-th-outline btn-sm flex-fill edit-btn" data-id="'+m.MeetingID+'"><i class="fa-solid fa-pen-to-square me-1"></i>Edit</button>'+
+          '<button class="btn btn-th-outline btn-sm flex-fill cancel-btn" data-id="'+m.MeetingID+'">Cancel</button>'+
+          '<button class="btn btn-th-danger btn-sm flex-fill del-btn" data-id="'+m.MeetingID+'"><i class="fa-solid fa-trash"></i></button>'+
+        '</div></div>'
+    ).join('');
+    grid.querySelectorAll('.edit-btn').forEach(b=>b.onclick=()=>openModal(meetings.find(m=>m.MeetingID===b.dataset.id)));
+    grid.querySelectorAll('.cancel-btn').forEach(b=>b.onclick=()=>cancelMeeting(b.dataset.id));
+    grid.querySelectorAll('.del-btn').forEach(b=>b.onclick=()=>delMeeting(b.dataset.id));
+  }
+
+  async function load(){
+    const [mr, pr] = await Promise.all([Api.call('getMeetings'), Api.call('getProjects')]);
+    if (mr.success) meetings = mr.data;
+    if (pr.success) { projects = pr.data; document.getElementById('mtgProjectSel').innerHTML = '<option value="">General</option>'+projects.map(p=>'<option value="'+p.ProjectID+'">'+thEscape(p.ProjectName)+'</option>').join(''); }
+    render();
+  }
+  async function cancelMeeting(id){
+    const res = await Api.call('updateMeeting', {meetingId:id, Status:'Cancelled', actorId:session.id, actorName:session.name});
+    if (res.success){ thToast('Meeting cancelled','success'); load(); }
+  }
+  async function delMeeting(id){
+    if (!confirm('Delete this meeting?')) return;
+    const res = await Api.call('deleteMeeting', {meetingId:id, actorId:session.id, actorName:session.name});
+    if (res.success){ thToast('Meeting deleted','success'); load(); }
+  }
+
+  document.body.insertAdjacentHTML('beforeend',
+    '<div class="modal fade" id="mtgModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content">'+
+    '<div class="modal-header"><h5 class="modal-title" id="mtgModalTitle">Schedule Meeting</h5><button class="btn-close" data-bs-dismiss="modal"></button></div>'+
+    '<div class="modal-body">'+
+      '<input type="hidden" id="mtgId">'+
+      '<div class="mb-2"><label>Title *</label><input class="form-control" id="mtgTitle"></div>'+
+      '<div class="mb-2"><label>Description</label><textarea class="form-control" id="mtgDesc" rows="2"></textarea></div>'+
+      '<div class="mb-2"><label>Project</label><select class="form-select" id="mtgProjectSel"></select></div>'+
+      '<div class="row g-2 mb-2">'+
+        '<div class="col-6"><label>Date *</label><input type="date" class="form-control" id="mtgDate"></div>'+
+        '<div class="col-6"><label>Time</label><input type="time" class="form-control" id="mtgTime"></div>'+
+      '</div>'+
+      '<div class="row g-2 mb-2">'+
+        '<div class="col-6"><label>Location</label><input class="form-control" id="mtgLocation"></div>'+
+        '<div class="col-6"><label>Meeting Link</label><input class="form-control" id="mtgLink"></div>'+
+      '</div>'+
+      '<div id="mtgError" class="text-danger" style="font-size:.85rem; display:none;"></div>'+
+    '</div><div class="modal-footer"><button class="btn btn-th-outline" data-bs-dismiss="modal">Cancel</button><button class="btn btn-th-primary" id="mtgSaveBtn">Save</button></div>'+
+    '</div></div></div>'
+  );
+  const mtgModal = new bootstrap.Modal(document.getElementById('mtgModal'));
+  document.getElementById('newMeetingBtn').onclick = ()=>openModal(null);
+  function openModal(m){
+    document.getElementById('mtgModalTitle').textContent = m?'Edit Meeting':'Schedule Meeting';
+    document.getElementById('mtgId').value = m?m.MeetingID:'';
+    document.getElementById('mtgTitle').value = m?m.Title:'';
+    document.getElementById('mtgDesc').value = m?m.Description:'';
+    document.getElementById('mtgProjectSel').value = m?m.ProjectID:'';
+    document.getElementById('mtgDate').value = m&&m.Date?String(m.Date).slice(0,10):'';
+    document.getElementById('mtgTime').value = m?m.Time:'';
+    document.getElementById('mtgLocation').value = m?m.Location:'';
+    document.getElementById('mtgLink').value = m?m.MeetingLink:'';
+    document.getElementById('mtgError').style.display='none';
+    mtgModal.show();
+  }
+  document.getElementById('mtgSaveBtn').onclick = async function(){
+    const title = document.getElementById('mtgTitle').value.trim();
+    const date = document.getElementById('mtgDate').value;
+    const errBox = document.getElementById('mtgError');
+    if (!title || !date){ errBox.textContent='Title and date are required.'; errBox.style.display='block'; return; }
+    const id = document.getElementById('mtgId').value;
+    const payload = {
+      title:title, description:document.getElementById('mtgDesc').value, projectId:document.getElementById('mtgProjectSel').value,
+      date:date, time:document.getElementById('mtgTime').value, location:document.getElementById('mtgLocation').value,
+      meetingLink:document.getElementById('mtgLink').value, actorId:session.id, actorName:session.name
+    };
+    const res = id ? await Api.call('updateMeeting', Object.assign({meetingId:id}, payload)) : await Api.call('addMeeting', payload);
+    if (res.success){ thToast(res.message,'success'); mtgModal.hide(); load(); } else { errBox.textContent=res.message; errBox.style.display='block'; }
+  };
+
+  load();
+})();
+</script>
+</body>
+</html>

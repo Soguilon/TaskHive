@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Projects — TaskHive Admin</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+<link rel="stylesheet" href="../assets/css/style.css">
+</head>
+<body>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="../assets/js/api.js"></script>
+<script src="../assets/js/auth.js"></script>
+<script src="../assets/js/app.js"></script>
+<script>
+(async function(){
+  const session = buildShell('projects.html');
+  if (!session) return;
+  Theme.init();
+  const content = document.getElementById('thContent');
+  let allProjects = [];
+
+  content.innerHTML =
+    '<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">'+
+      '<h4 class="mb-0"><i class="fa-solid fa-folder me-2"></i>Projects</h4>'+
+      '<button class="btn btn-th-primary" id="newProjectBtn"><i class="fa-solid fa-plus me-2"></i>New Project</button>'+
+    '</div>'+
+    '<div class="th-card mb-3"><div class="row g-2">'+
+      '<div class="col-md-4"><select class="form-select" id="fStatus"><option value="">All Statuses</option><option>Planning</option><option>Active</option><option>Completed</option><option>Archived</option></select></div>'+
+      '<div class="col-md-4"><select class="form-select" id="fPriority"><option value="">All Priorities</option><option>High</option><option>Medium</option><option>Low</option></select></div>'+
+      '<div class="col-md-4"><input class="form-control" id="fCategory" placeholder="Filter by category..."></div>'+
+    '</div></div>'+
+    '<div id="projectGrid" class="th-grid cols-3"></div>';
+
+  function badgeStatus(s){ return '<span class="badge-status '+thStatusBadgeClass(s==='Planning'?'Not Started':s==='Active'?'In Progress':s==='Completed'?'Approved':'Needs Revision')+'">'+s+'</span>'; }
+
+  function render(){
+    const list = allProjects.filter(p=>{
+      const st = document.getElementById('fStatus').value;
+      const pr = document.getElementById('fPriority').value;
+      const cat = document.getElementById('fCategory').value.toLowerCase();
+      if (st && p.Status !== st) return false;
+      if (pr && p.Priority !== pr) return false;
+      if (cat && !(p.Category||'').toLowerCase().includes(cat)) return false;
+      return true;
+    });
+    const grid = document.getElementById('projectGrid');
+    if (!list.length){ grid.innerHTML = thEmptyHtml('fa-folder-open','No projects match your filters'); return; }
+    grid.innerHTML = list.map(p=>
+      '<div class="th-card">'+
+        '<div class="d-flex justify-content-between align-items-start mb-2"><h6 class="mb-0">'+thEscape(p.ProjectName)+'</h6>'+badgeStatus(p.Status)+'</div>'+
+        '<p class="text-secondary-th" style="font-size:.85rem; min-height:40px;">'+thEscape(p.Description||'No description')+'</p>'+
+        '<div class="d-flex gap-2 mb-2" style="font-size:.78rem;">'+
+          '<span class="badge-status '+thPriorityBadgeClass(p.Priority)+'">'+thEscape(p.Priority)+'</span>'+
+          '<span class="text-secondary-th"><i class="fa-solid fa-tag me-1"></i>'+thEscape(p.Category||'—')+'</span>'+
+        '</div>'+
+        '<div class="th-progress mb-1"><div class="th-progress-bar" style="width:'+(p.Progress||0)+'%;"></div></div>'+
+        '<div class="d-flex justify-content-between text-secondary-th" style="font-size:.75rem;"><span>'+(p.Progress||0)+'% complete</span><span>Due '+thFmtDate(p.Deadline)+'</span></div>'+
+        '<div class="d-flex gap-2 mt-3">'+
+          '<button class="btn btn-th-outline btn-sm flex-fill edit-btn" data-id="'+p.ProjectID+'"><i class="fa-solid fa-pen-to-square"></i></button>'+
+          '<button class="btn btn-th-outline btn-sm flex-fill complete-btn" data-id="'+p.ProjectID+'" title="Mark Completed"><i class="fa-solid fa-circle-check"></i></button>'+
+          '<button class="btn btn-th-outline btn-sm flex-fill archive-btn" data-id="'+p.ProjectID+'" title="Archive"><i class="fa-solid fa-box-archive"></i></button>'+
+          '<button class="btn btn-th-danger btn-sm flex-fill delete-btn" data-id="'+p.ProjectID+'" title="Delete"><i class="fa-solid fa-trash"></i></button>'+
+        '</div>'+
+      '</div>'
+    ).join('');
+
+    grid.querySelectorAll('.edit-btn').forEach(b=>b.onclick=()=>openModal(list.find(p=>p.ProjectID===b.dataset.id)));
+    grid.querySelectorAll('.complete-btn').forEach(b=>b.onclick=()=>completeProject(b.dataset.id));
+    grid.querySelectorAll('.archive-btn').forEach(b=>b.onclick=()=>archiveProject(b.dataset.id));
+    grid.querySelectorAll('.delete-btn').forEach(b=>b.onclick=()=>deleteProject(b.dataset.id));
+  }
+
+  async function load(){
+    const res = await Api.call('getProjects');
+    if (res.success) { allProjects = res.data; render(); }
+    else content.querySelector('#projectGrid') && (document.getElementById('projectGrid').innerHTML = thEmptyHtml('fa-triangle-exclamation', res.message));
+  }
+  ['fStatus','fPriority'].forEach(id=>document.getElementById(id).addEventListener('change', render));
+  document.getElementById('fCategory').addEventListener('input', render);
+
+  // Modal
+  const modalHtml = '<div class="modal fade" id="projModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content">'+
+    '<div class="modal-header"><h5 class="modal-title" id="projModalTitle">New Project</h5><button class="btn-close" data-bs-dismiss="modal"></button></div>'+
+    '<div class="modal-body">'+
+      '<input type="hidden" id="pId">'+
+      '<div class="mb-3"><label>Project Name *</label><input class="form-control" id="pName" required></div>'+
+      '<div class="mb-3"><label>Description</label><textarea class="form-control" id="pDesc" rows="3"></textarea></div>'+
+      '<div class="row g-2 mb-3">'+
+        '<div class="col-6"><label>Category</label><input class="form-control" id="pCategory"></div>'+
+        '<div class="col-6"><label>Priority</label><select class="form-select" id="pPriority"><option>Low</option><option selected>Medium</option><option>High</option></select></div>'+
+      '</div>'+
+      '<div class="row g-2 mb-3">'+
+        '<div class="col-6"><label>Deadline</label><input type="date" class="form-control" id="pDeadline"></div>'+
+        '<div class="col-6"><label>Status</label><select class="form-select" id="pStatus"><option>Planning</option><option>Active</option><option>Completed</option></select></div>'+
+      '</div>'+
+      '<div id="pError" class="text-danger" style="font-size:.85rem; display:none;"></div>'+
+    '</div>'+
+    '<div class="modal-footer"><button class="btn btn-th-outline" data-bs-dismiss="modal">Cancel</button><button class="btn btn-th-primary" id="pSaveBtn">Save Project</button></div>'+
+  '</div></div></div>';
+  document.body.insertAdjacentHTML('beforeend', modalHtml);
+  const projModal = new bootstrap.Modal(document.getElementById('projModal'));
+
+  document.getElementById('newProjectBtn').onclick = ()=>openModal(null);
+  function openModal(p){
+    document.getElementById('projModalTitle').textContent = p ? 'Edit Project' : 'New Project';
+    document.getElementById('pId').value = p ? p.ProjectID : '';
+    document.getElementById('pName').value = p ? p.ProjectName : '';
+    document.getElementById('pDesc').value = p ? p.Description : '';
+    document.getElementById('pCategory').value = p ? p.Category : '';
+    document.getElementById('pPriority').value = p ? p.Priority : 'Medium';
+    document.getElementById('pDeadline').value = p && p.Deadline ? String(p.Deadline).slice(0,10) : '';
+    document.getElementById('pStatus').value = p ? p.Status : 'Planning';
+    document.getElementById('pError').style.display = 'none';
+    projModal.show();
+  }
+
+  document.getElementById('pSaveBtn').onclick = async function(){
+    const name = document.getElementById('pName').value.trim();
+    const errBox = document.getElementById('pError');
+    if (!name){ errBox.textContent = 'Project name cannot be empty.'; errBox.style.display='block'; return; }
+    const id = document.getElementById('pId').value;
+    const payload = {
+      projectName: name, description: document.getElementById('pDesc').value,
+      category: document.getElementById('pCategory').value, priority: document.getElementById('pPriority').value,
+      deadline: document.getElementById('pDeadline').value, status: document.getElementById('pStatus').value,
+      actorId: session.id, actorName: session.name
+    };
+    const res = id ? await Api.call('updateProject', Object.assign({projectId:id}, payload)) : await Api.call('addProject', payload);
+    if (res.success){ thToast(res.message,'success'); projModal.hide(); load(); }
+    else { errBox.textContent = res.message; errBox.style.display='block'; }
+  };
+
+  async function completeProject(id){
+    const res = await Api.call('updateProject', {projectId:id, Status:'Completed', actorId:session.id, actorName:session.name});
+    if (res.success){ thToast('Project marked as completed','success'); load(); } else thToast(res.message,'error');
+  }
+  async function archiveProject(id){
+    if (!confirm('Archive this project? It will be moved to the Archive.')) return;
+    const res = await Api.call('archiveProject', {projectId:id, actorId:session.id, actorName:session.name});
+    if (res.success){ thToast('Project archived','success'); load(); } else thToast(res.message,'error');
+  }
+  async function deleteProject(id){
+    if (!confirm('Delete this project? It will be moved to Trash and can be restored later.')) return;
+    const res = await Api.call('deleteProject', {projectId:id, actorId:session.id, actorName:session.name});
+    if (res.success){ thToast('Project moved to trash','success'); load(); } else thToast(res.message,'error');
+  }
+
+  load();
+})();
+</script>
+</body>
+</html>

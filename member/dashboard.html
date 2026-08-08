@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard — TaskHive</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+<link rel="stylesheet" href="../assets/css/style.css">
+</head>
+<body>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="../assets/js/api.js"></script>
+<script src="../assets/js/auth.js"></script>
+<script src="../assets/js/app.js"></script>
+<script>
+(async function(){
+  const session = buildShell('dashboard.html');
+  if (!session) return;
+  if (session.role !== 'Member') { window.location.href = '../admin/dashboard.html'; return; }
+  Theme.init();
+  const content = document.getElementById('thContent');
+  content.innerHTML = thLoadingHtml('Fetching your workspace...');
+
+  const [tasksRes, projRes, meetRes, notifRes] = await Promise.all([
+    Api.call('getTasks'), Api.call('getProjects'), Api.call('getMeetings'), Api.call('getNotifications', {userId: session.id})
+  ]);
+  const allTasks = tasksRes.success ? tasksRes.data : [];
+  const myTasks = allTasks.filter(t=>t.AssignedMemberID===session.id);
+  const projects = projRes.success ? projRes.data : [];
+  const myProjectIds = Array.from(new Set(myTasks.map(t=>t.ProjectID)));
+  const myProjects = projects.filter(p=>myProjectIds.includes(p.ProjectID));
+  const meetings = meetRes.success ? meetRes.data.filter(m=>myProjectIds.includes(m.ProjectID)) : [];
+
+  function stat(icon,val,lbl){ return '<div class="th-card th-stat-card"><div class="icon"><i class="fa-solid '+icon+'"></i></div><div><div class="val">'+val+'</div><div class="lbl">'+lbl+'</div></div></div>'; }
+
+  content.innerHTML =
+    '<h4 class="mb-3">Hi, '+thEscape(session.name)+'! Here\'s what\'s on your plate.</h4>'+
+    '<div class="th-grid cols-4 mb-3">'+
+      stat('fa-folder', myProjects.length, 'My Projects')+
+      stat('fa-hourglass-half', myTasks.filter(t=>t.Status==='Not Started'||t.Status==='In Progress').length, 'Pending Tasks')+
+      stat('fa-square-check', myTasks.filter(t=>t.Status==='Approved').length, 'Approved Tasks')+
+      stat('fa-triangle-exclamation', myTasks.filter(t=>t.Status==='Needs Revision').length, 'Needs Revision')+
+    '</div>'+
+    '<div class="th-grid cols-2">'+
+      '<div class="th-card"><h6 class="mb-3"><i class="fa-solid fa-list-check me-2"></i>My Task Snapshot</h6><div id="taskSnap"></div></div>'+
+      '<div class="th-card"><h6 class="mb-3"><i class="fa-solid fa-calendar-check me-2"></i>Upcoming Meetings</h6><div id="meetSnap"></div></div>'+
+    '</div>';
+
+  document.getElementById('taskSnap').innerHTML = myTasks.length ? myTasks.slice(0,6).map(t=>
+    '<div class="d-flex justify-content-between align-items-center mb-2" style="font-size:.85rem;"><span>'+thEscape(t.TaskTitle)+'</span><span class="badge-status '+thStatusBadgeClass(t.Status)+'">'+t.Status+'</span></div>'
+  ).join('') : thEmptyHtml('fa-inbox','No tasks assigned yet');
+
+  document.getElementById('meetSnap').innerHTML = meetings.length ? meetings.slice(0,6).map(m=>
+    '<div class="mb-2" style="font-size:.85rem;"><strong>'+thEscape(m.Title)+'</strong><div class="text-secondary-th" style="font-size:.75rem;">'+thFmtDate(m.Date)+' '+thEscape(m.Time||'')+'</div></div>'
+  ).join('') : thEmptyHtml('fa-calendar-xmark','No upcoming meetings');
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>My Notes — TaskHive</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+<link rel="stylesheet" href="../assets/css/style.css">
+</head>
+<body>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="../assets/js/api.js"></script>
+<script src="../assets/js/auth.js"></script>
+<script src="../assets/js/app.js"></script>
+<script>
+(async function(){
+  const session = buildShell('notes.html');
+  if (!session) return;
+  Theme.init();
+  const content = document.getElementById('thContent');
+  let notes = [];
+
+  content.innerHTML =
+    '<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">'+
+      '<h4 class="mb-0"><i class="fa-solid fa-note-sticky me-2"></i>My Notes</h4>'+
+      '<button class="btn btn-th-primary" id="newNoteBtn"><i class="fa-solid fa-plus me-2"></i>New Note</button>'+
+    '</div>'+
+    '<div id="noteGrid" class="th-grid cols-3"></div>';
+
+  function render(){
+    const grid = document.getElementById('noteGrid');
+    if (!notes.length){ grid.innerHTML = thEmptyHtml('fa-note-sticky','No notes yet. Create your first note.'); return; }
+    grid.innerHTML = notes.map(n=>
+      '<div class="th-card"><h6>'+thEscape(n.Title)+'</h6>'+
+      '<p class="text-secondary-th" style="font-size:.85rem; white-space:pre-wrap;">'+thEscape(n.Content||'')+'</p>'+
+      '<div class="text-secondary-th" style="font-size:.75rem;">Updated '+thFmtDate(n.LastUpdated)+'</div>'+
+      '<div class="d-flex gap-2 mt-3">'+
+        '<button class="btn btn-th-outline btn-sm flex-fill edit-btn" data-id="'+n.NoteID+'"><i class="fa-solid fa-pen-to-square me-1"></i>Edit</button>'+
+        '<button class="btn btn-th-danger btn-sm flex-fill del-btn" data-id="'+n.NoteID+'"><i class="fa-solid fa-trash"></i></button>'+
+      '</div></div>'
+    ).join('');
+    grid.querySelectorAll('.edit-btn').forEach(b=>b.onclick=()=>openModal(notes.find(n=>n.NoteID===b.dataset.id)));
+    grid.querySelectorAll('.del-btn').forEach(b=>b.onclick=async()=>{
+      if (!confirm('Delete this note?')) return;
+      const res = await Api.call('deleteNote', {noteId:b.dataset.id, memberId:session.id});
+      if (res.success){ thToast('Note deleted','success'); load(); } else thToast(res.message,'error');
+    });
+  }
+  async function load(){
+    const res = await Api.call('getNotes', {memberId: session.id});
+    if (res.success){ notes = res.data; render(); }
+  }
+
+  document.body.insertAdjacentHTML('beforeend',
+    '<div class="modal fade" id="noteModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content">'+
+    '<div class="modal-header"><h5 class="modal-title" id="noteModalTitle">New Note</h5><button class="btn-close" data-bs-dismiss="modal"></button></div>'+
+    '<div class="modal-body">'+
+      '<input type="hidden" id="nId">'+
+      '<div class="mb-2"><label>Title *</label><input class="form-control" id="nTitle"></div>'+
+      '<div class="mb-2"><label>Content</label><textarea class="form-control" id="nContent" rows="5"></textarea></div>'+
+      '<div id="nError" class="text-danger" style="font-size:.85rem; display:none;"></div>'+
+    '</div><div class="modal-footer"><button class="btn btn-th-outline" data-bs-dismiss="modal">Cancel</button><button class="btn btn-th-primary" id="nSaveBtn">Save</button></div>'+
+    '</div></div></div>'
+  );
+  const noteModal = new bootstrap.Modal(document.getElementById('noteModal'));
+  document.getElementById('newNoteBtn').onclick = ()=>openModal(null);
+  function openModal(n){
+    document.getElementById('noteModalTitle').textContent = n?'Edit Note':'New Note';
+    document.getElementById('nId').value = n?n.NoteID:'';
+    document.getElementById('nTitle').value = n?n.Title:'';
+    document.getElementById('nContent').value = n?n.Content:'';
+    document.getElementById('nError').style.display='none';
+    noteModal.show();
+  }
+  document.getElementById('nSaveBtn').onclick = async function(){
+    const title = document.getElementById('nTitle').value.trim();
+    const errBox = document.getElementById('nError');
+    if (!title){ errBox.textContent='Note title cannot be empty.'; errBox.style.display='block'; return; }
+    const id = document.getElementById('nId').value;
+    const content = document.getElementById('nContent').value;
+    const res = id ? await Api.call('updateNote', {noteId:id, memberId:session.id, title:title, content:content})
+                   : await Api.call('addNote', {memberId:session.id, title:title, content:content, actorName:session.name});
+    if (res.success){ thToast(res.message,'success'); noteModal.hide(); load(); } else { errBox.textContent=res.message; errBox.style.display='block'; }
+  };
+
+  load();
+})();
+</script>
+</body>
+</html>

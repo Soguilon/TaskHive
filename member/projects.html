@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>My Projects — TaskHive</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+<link rel="stylesheet" href="../assets/css/style.css">
+</head>
+<body>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="../assets/js/api.js"></script>
+<script src="../assets/js/auth.js"></script>
+<script src="../assets/js/app.js"></script>
+<script>
+(async function(){
+  const session = buildShell('projects.html');
+  if (!session) return;
+  Theme.init();
+  const content = document.getElementById('thContent');
+  content.innerHTML = '<h4 class="mb-3"><i class="fa-solid fa-folder me-2"></i>My Projects</h4><div id="grid" class="th-grid cols-3">'+thLoadingHtml()+'</div>';
+
+  const [taskRes, projRes] = await Promise.all([Api.call('getTasks'), Api.call('getProjects')]);
+  const grid = document.getElementById('grid');
+  if (!taskRes.success || !projRes.success){ grid.innerHTML = thEmptyHtml('fa-triangle-exclamation','Unable to load projects'); return; }
+  const myProjectIds = Array.from(new Set(taskRes.data.filter(t=>t.AssignedMemberID===session.id).map(t=>t.ProjectID)));
+  const myProjects = projRes.data.filter(p=>myProjectIds.includes(p.ProjectID));
+
+  grid.innerHTML = myProjects.length ? myProjects.map(p=>
+    '<div class="th-card"><div class="d-flex justify-content-between mb-2"><h6 class="mb-0">'+thEscape(p.ProjectName)+'</h6><span class="badge-status badge-in-progress">'+p.Status+'</span></div>'+
+    '<p class="text-secondary-th" style="font-size:.85rem;">'+thEscape(p.Description||'No description')+'</p>'+
+    '<div class="th-progress mb-1"><div class="th-progress-bar" style="width:'+(p.Progress||0)+'%;"></div></div>'+
+    '<div class="text-secondary-th" style="font-size:.78rem;">'+(p.Progress||0)+'% complete · Due '+thFmtDate(p.Deadline)+'</div></div>'
+  ).join('') : thEmptyHtml('fa-folder-open','You have not been assigned to any projects yet');
+})();
+</script>
+</body>
+</html>
